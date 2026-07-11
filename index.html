@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turn Bulky Claude Code Context Into Images With pxpipe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Geist:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-from:   #0f0d13;
+    --bg-to:     #0a0a0c;
+    --bg-raised: #17151e;
+    --bg-inset:  #1e1c27;
+    --border:    #272430;
+    --text:      #f0ede8;
+    --text-2:    #f0ede8;
+    --text-3:    #6b6880;
+    --accent:    #3d2474;
+    --col:       680px;
+  }
+
+  html { font-size: 17px; scroll-behavior: smooth; }
+
+  body {
+    background: linear-gradient(135deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    min-height: 100vh;
+    color: var(--text);
+    font-family: 'Geist', system-ui, sans-serif;
+    font-weight: 300;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2px;
+    background: var(--accent);
+    width: 0%;
+    z-index: 200;
+    transition: width 0.08s linear;
+  }
+
+  .hero {
+    max-width: var(--col);
+    margin: 0 auto;
+    padding: 4rem 1.5rem 0;
+    opacity: 0;
+    animation: fadeUp 0.7s ease 0.1s forwards;
+  }
+
+  h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(2.8rem, 7vw, 4.2rem);
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    margin-bottom: 1.2rem;
+  }
+
+  .subtitle {
+    font-family: 'Geist', sans-serif;
+    font-size: 0.98rem;
+    font-weight: 300;
+    color: var(--text-2);
+    line-height: 1.72;
+    margin-bottom: 1.6rem;
+    max-width: 540px;
+  }
+
+  .byline {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding-bottom: 1.4rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-2);
+    flex-shrink: 0;
+  }
+
+  .byline-text { font-size: 0.76rem; color: var(--text-3); line-height: 1.5; }
+  .byline-text strong { color: var(--text-2); font-weight: 500; display: block; }
+
+  .demo-video {
+    display: block;
+    width: min(100%, 420px);
+    max-height: 78vh;
+    margin: 2rem auto 0;
+    aspect-ratio: 9 / 16;
+    object-fit: contain;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.18s forwards;
+  }
+
+  article {
+    max-width: var(--col);
+    margin: 0 auto;
+    padding: 2.6rem 1.5rem 7rem;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.25s forwards;
+  }
+
+  article p {
+    font-family: 'Geist', sans-serif;
+    font-size: 1rem;
+    font-weight: 300;
+    color: var(--text-2);
+    margin-bottom: 1.5rem;
+    line-height: 1.82;
+  }
+
+  article p:first-of-type { font-size: 1.04rem; }
+
+  .drop-cap::first-letter {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 4.5rem;
+    font-weight: 700;
+    float: left;
+    line-height: 0.8;
+    margin-right: 0.1em;
+    margin-top: 0.12em;
+    color: var(--text);
+  }
+
+  h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 3.5rem 0 0.85rem;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+
+  /* Code block */
+  .code-wrap {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 2.8rem 0;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Geist', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+  }
+
+  .copy-btn {
+    position: relative;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-3);
+    font-family: 'Geist', sans-serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    padding: 0.25rem 0.65rem;
+    cursor: pointer;
+    overflow: hidden;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+    min-width: 52px;
+  }
+
+  .copy-btn:hover {
+    color: var(--text-2);
+    border-color: var(--text-3);
+  }
+
+  .copy-btn .btn-label {
+    display: block;
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.18s ease;
+  }
+
+  .copy-btn.copied {
+    color: #9d8ec4;
+    border-color: #5a4490;
+    background: rgba(61, 36, 116, 0.15);
+  }
+
+  .copy-btn.copied .btn-label {
+    transform: scale(1.08);
+  }
+
+  .copy-btn.fading {
+    transition: color 0.6s ease, border-color 0.6s ease, background 0.6s ease;
+    color: var(--text-3);
+    border-color: var(--border);
+    background: none;
+  }
+
+  pre {
+    padding: 1.4rem 1.2rem;
+    overflow-x: auto;
+    font-family: 'Geist Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 0.79rem;
+    line-height: 1.75;
+    color: var(--text-2);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  pre .comment { color: #6b6880; }
+
+  .link-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.25rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .pill-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: 99px;
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+    font-family: 'Geist', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: var(--text-3);
+    text-decoration: none;
+    letter-spacing: 0.04em;
+    transition: color 0.18s, border-color 0.18s;
+  }
+
+  .pill-link:hover {
+    color: var(--text-2);
+    border-color: var(--text-3);
+  }
+
+  .skill-img {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    display: block;
+    margin: 1.6rem 0 1.4rem;
+    background: var(--bg-raised);
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 1.8rem 1.5rem;
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-3);
+    letter-spacing: 0.06em;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 600px) {
+    h1 { font-size: 2.4rem; }
+    .hero { padding-top: 2.5rem; padding-left: 1.5rem; padding-right: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<section class="hero">
+  <h1>How To Stop Wasting Tokens On Walls Of Context</h1>
+  <p class="subtitle">A quick tutorial for using pxpipe with Claude Code and Fable 5: turn bulky prompts, tool docs, and old history into dense images so the model can read more context for fewer input tokens.</p>
+  <div class="byline">
+    <div class="avatar">A</div>
+    <div class="byline-text">
+      <strong>Adi</strong>
+      3 min read &nbsp;&middot;&nbsp; July 2026
+    </div>
+  </div>
+</section>
+
+<article>
+
+  <p class="drop-cap">If you use Claude Code with Fable 5, there is a clever way to stop burning input tokens on giant chunks of repeated context. Instead of sending every long prompt, tool dump, file read, and older history block as plain text, pxpipe renders the bulky parts into compact PNG pages before the request leaves your machine.</p>
+
+  <p>The trick works because image token cost is based mostly on pixel size, not the amount of text drawn inside the image. The repo shows an example where roughly 48k characters, about 25k text tokens, become a dense image page billed at about 2.7k image tokens. That is the whole idea: use the model's vision channel as a cheaper carrier for context that does not need to be byte-perfect.</p>
+
+  <h2>What Is pxpipe</h2>
+
+  <img class="skill-img" src="https://opengraph.githubassets.com/1/teamchong/pxpipe" alt="pxpipe GitHub repository preview" loading="lazy">
+
+  <div class="link-row">
+    <a class="pill-link" href="https://github.com/teamchong/pxpipe" target="_blank">GitHub repo</a>
+    <a class="pill-link" href="https://github.com/teamchong/pxpipe#readme" target="_blank">README</a>
+  </div>
+
+  <p><code>pxpipe-proxy</code> is a local proxy for model requests. Claude Code sends its Anthropic traffic to the proxy, the proxy looks for token-dense input blocks that are worth compressing, renders those blocks as images, then forwards the transformed request. The model output still streams normally. Your recent turns still stay as text. The proxy only compresses eligible input bulk.</p>
+
+  <h2>Start The Proxy</h2>
+
+  <p>The fastest path is a two-command setup. First run the proxy. Then point Claude Code at the local Anthropic-compatible endpoint. The dashboard opens on the same port so you can inspect what was converted, watch savings, and hit the kill switch if you want everything to pass through as plain text.</p>
+
+  <div class="code-wrap">
+    <div class="code-header">
+      <span>RUN</span>
+      <button class="copy-btn" onclick="copyCode(this, 'cmd-run')">
+        <span class="btn-label">Copy</span>
+      </button>
+    </div>
+    <pre id="cmd-run">npx pxpipe-proxy                                  <span class="comment"># proxy on 127.0.0.1:47821</span>
+ANTHROPIC_BASE_URL=http://127.0.0.1:47821 claude  <span class="comment"># route Claude Code through pxpipe</span></pre>
+  </div>
+
+  <p>Once it is running, visit <code>http://127.0.0.1:47821/</code>. You will see each text-to-image conversion side by side, the current model allowlist, and the measured token counterfactuals logged by the proxy.</p>
+
+  <h2>What Gets Rendered</h2>
+
+  <p>pxpipe does not blindly turn the whole chat into screenshots. It targets the expensive, repetitive input: large tool results, older collapsed history, and the static system prompt plus tool docs slab. Small messages, recent context, sparse prose, model output, and unsupported models pass through normally.</p>
+
+  <div class="code-wrap">
+    <div class="code-header">
+      <span>MENTAL MODEL</span>
+      <button class="copy-btn" onclick="copyCode(this, 'cmd-prompt')">
+        <span class="btn-label">Copy</span>
+      </button>
+    </div>
+    <pre id="cmd-prompt">model request
+  - recent user messages: keep as text
+  - exact IDs, hashes, secrets: keep as text
+  - huge tool output: render as PNG pages when profitable
+  - old history: render as PNG pages when profitable
+  - system prompt + tool docs: render as PNG pages when profitable
+
+proxy forwards transformed request
+model reads image pages through vision
+response streams back untouched</pre>
+  </div>
+
+  <h2>The Catch</h2>
+
+  <p>This is not OCR. Vision models read pixels as embeddings, not as guaranteed characters. That means dense imaged context is great for gist, code shape, logs, repeated docs, and broad recall, but it is risky for byte-exact strings. If the task depends on a hash, a short ID, a filename, a secret, or a tiny value where one character matters, keep that part as text or make the agent re-read the source file before acting.</p>
+
+  <p>That is the trade: you can often cut request cost dramatically, sometimes around 59 to 70 percent end to end on Claude Code style workloads, but the savings come from using a lossy channel. Use it for bulky context. Do not use it as your only copy of facts that must be reproduced exactly.</p>
+
+</article>
+
+<footer>
+  &copy; 2026 &nbsp;&middot;&nbsp; All rights reserved
+</footer>
+
+<script>
+  const bar = document.getElementById('progress');
+  window.addEventListener('scroll', () => {
+    const total = document.body.scrollHeight - window.innerHeight;
+    bar.style.width = (window.scrollY / total * 100) + '%';
+  }, { passive: true });
+
+  let resetTimers = {};
+
+  function copyCode(btn, id) {
+    const text = document.getElementById(id).textContent;
+    const label = btn.querySelector(".btn-label");
+
+    if (resetTimers[id]) clearTimeout(resetTimers[id]);
+    btn.classList.remove("fading");
+    label.textContent = "Copied!";
+    btn.classList.add("copied");
+
+    resetTimers[id] = setTimeout(() => {
+      btn.classList.remove("copied");
+      btn.classList.add("fading");
+      setTimeout(() => {
+        label.textContent = "Copy";
+        btn.classList.remove("fading");
+      }, 620);
+    }, 1600);
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none;";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand("copy"); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+</script>
+
+</body>
+</html>
+
